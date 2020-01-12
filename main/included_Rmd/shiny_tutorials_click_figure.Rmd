@@ -1,0 +1,8 @@
+---
+title: "shiny_tutorials.Rmd"
+author: "GL Li"
+date: "December 7, 2015"
+output: html_document
+---
+A common task in interactive plotting is to click on figures to extract more information. Shiny is a handy tool for this kind of work. This interactive document demonstrates and explains how to click on a figure to get another using the data from the clicked location.
+

@@ -1,0 +1,7 @@
+---
+title: "shiny"
+author: "GL Li"
+date: "December 7, 2015"
+output: html_document
+---
+In this tutorial, we will continue the discussion of Shiny ``click``  with one more example: click on a map to get something else. The purpose is to further understand the ``click`` and its application. Shiny ``click`` provides a flexible tool for interactive plotting with map.

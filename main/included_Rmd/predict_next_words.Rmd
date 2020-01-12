@@ -1,0 +1,10 @@
+---
+title: "predict next words"
+author: "GL Li"
+date: "December 6, 2015"
+output: html_document
+---
+<a href="https://gl-li.shinyapps.io/nextWord_ShinyApp" target="_blank"><h4>Predict next words</h4></a>  
+
+This is the capstone project of online course
+<a href="https://www.coursera.org/specializations/jhudatascience" target = "blank">Data Science Specialization</a> offered by Johns Hopkins University. In this project we build a web application to predict the next words following each keystroke. This kind of applications have been widely used for text input in mobile devices such as cell phones and tablets.

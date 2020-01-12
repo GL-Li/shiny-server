@@ -1,0 +1,90 @@
+```{r, echo=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE)
+```
+
+
+### Basic procedure of using machine learning package ``mlr`` in R
+
+Package ``mlr`` provides an unified framework for machine learning experiments in R. This summary briefly explains the major steps of using ``mlr`` with an example that builds a random forest model on ``mtcars`` dataset. The [official tutorial](http://mlr-org.github.io/mlr-tutorial/devel/html/task/index.html) has more details of each step for various machine learning questions. 
+
+**prepare train and test data**  
+```{r}
+set.seed(111)
+sub <- sample(nrow(mtcars), round(0.7 * nrow(mtcars)))
+train <- mtcars[sub,]
+test <- mtcars[-sub,]
+```
+
+**define tasks and learner**   
+Tasks define computer what kind of machine learning problem to solve with the data set. Learner specifies what algorithsm to use for the task. 
+```{r}
+library(mlr)
+# set up regression tasks to find the dependence of "mpg" on all predictors
+taskTrain <- makeRegrTask(data = train, target = "mpg")
+taskTest <- makeRegrTask(data = test, target = "mpg")
+
+# choose random forest algorithsm for this regression task
+learner <- makeLearner(cl = "regr.randomForest")
+```
+
+**set the ranges of hyper parameters**  
+Random forest have two hyper parameters, ``mtry`` and ``ntree``, that can be optimized. We need to specify their ranges or values within which the optimal ones are chosen.
+```{r}
+# set the range or values
+ps <- makeParamSet(
+    makeDiscreteParam ("mtry", values = 2:6),
+    makeDiscreteParam("ntree", values = seq(200, 600, by = 100))
+)
+# specify the tune control method
+ctrl <- makeTuneControlGrid()
+```
+
+**make resample method**  
+Specify resample method for tuning hyper parameters.
+```{r}
+# 3 fold cross validation
+rdesc <- makeResampleDesc(method = "CV", iters = 3L)
+```
+
+**prepare parallel computing**  
+Speed up computing when the dataset is large.
+```{r}
+library(parallelMap)
+# use 3 cpus
+parallelStartSocket(3)
+```
+
+**tune hyper parameters**  
+Find the optimal hyper parameters that minimize the performance measures, in the code below, root mean square error (rmse). 
+```{r}
+res <- tuneParams(learner = learner, 
+                  task = taskTrain, 
+                  resampling = rdesc, 
+                  par.set = ps,
+                  control = ctrl,
+                  measures = rmse)
+# view optimal hyper parameters
+res$x
+# view optimization path
+data.frame(res$opt.path)
+```
+
+
+**build model**  
+Use the optimal hyper parameters to build the final model.
+```{r}
+# assign the optimal hyper paramters to the learner
+learner <- setHyperPars(learner, par.vals = res$x)
+# train the model 
+mod <- train(learner, taskTrain)
+```
+
+**make predictions**  
+Apply the model to test data and make predictions.
+```{r}
+pred <- predict(mod, taskTest)
+# compare predicted and measured values
+plot(pred$data$truth, pred$data$response, 
+     xlab = "Measured mpg", ylab = "Predicted mpg")
+```

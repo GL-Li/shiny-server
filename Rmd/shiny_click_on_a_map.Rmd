@@ -1,0 +1,424 @@
+---
+title: 'Shiny: click on a map'
+output: html_document
+runtime: shiny
+---
+<style>
+#example iframe {
+height: 290px;
+}
+#twoMap iframe {
+height: 290px;
+}
+</style>
+
+```{r, echo=FALSE}
+library(knitr)
+opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+In [a previous post](http://playshiny.com/2015/11/23/shiny-click-on-a-figure-to-get-another/) we discussed how to click on a figure to get another one and explained how the parameter ``click`` works in ``plotOutput`` function. In this post, we will continue this discussion with one more example: click on a map to get something else. The purpose is to further understand the ``click`` and its application. Shiny ``click`` provides a flexible tool for interactive plotting with map.
+
+### The example: click on a map {#example}
+Let's first take a look what we want to do with a map. The figures below show a map of the US at the left and a scatter plot of the arrest at the right. Each data point in the scatter plot corresponds to a state that tells the number of person arrested for murder, rape, and assault per 100,000 population, plus the percent of urban population. However, we can not tell which state from the scatter plot. As a demo of the application of mouse click, we want highlight the data point of a state in the scatter plot with a red circle when the state is clicked in the map. The clicked state is also highlighted and its name is printed.
+
+```{r, echo=FALSE}
+# all comments are deleted. see codes section for comments.
+library(ggplot2)
+library(maps)
+usaMap <- map_data("state")
+
+library(MASS)
+data("USArrests")
+
+which_state <- function(mapData, long, lat) {
+    mapData$long_diff <- mapData$long - long
+    mapData$lat_diff <- mapData$lat - lat
+    
+    mapData <- mapData[abs(mapData$long_diff) < 20 & abs(mapData$lat_diff) < 15, ]
+    
+    vLong <- mapData$long_diff
+    vLat <- mapData$lat_diff
+    mapData$angle <- acos(vLong / sqrt(vLong^2 + vLat^2))
+    
+    rangeAngle <- tapply(mapData$angle, mapData$region, function(x) max(x) - min(x))
+    return(names(sort(rangeAngle, decreasing = TRUE))[1])
+}
+
+library(shiny)
+plotMap <- ggplot(usaMap, aes(x = long, y = lat, group = group)) + 
+    geom_polygon(fill = "white", color = "black")
+plotArrest <- ggplot(USArrests, aes(x = Murder, y = Rape)) + 
+    geom_point(aes(size = Assault, color = UrbanPop)) + 
+    scale_size(limits = c(1, 350))
+
+ui <- shinyUI(fluidPage(
+    column(
+        width = 6,
+        plotOutput("map", click = "clickMap", width = 430, height = 275)
+    ),
+    column(
+        width = 6,
+        plotOutput("arrest", width = 430, height = 275)
+    )
+))
+
+server <- shinyServer(function(input, output) {
+    output$map <- renderPlot({
+        plotMap
+    })
+    output$arrest <- renderPlot({
+        plotArrest
+    })
+    
+    observeEvent(input$clickMap, {
+        xClick <- input$clickMap$x
+        yClick <- input$clickMap$y
+        state <- which_state(usaMap, xClick, yClick)
+        output$map <- renderPlot(
+            plotMap + 
+                geom_polygon(data = usaMap[usaMap$region == state,], 
+                             fill = "yellow") +
+                annotate("text", x = xClick, y = yClick, label = state, color = "red")
+        )
+        output$arrest <- renderPlot({
+            plotArrest +
+                geom_point(data = USArrests[tolower(rownames(USArrests)) == state,],
+                           size = 6, shape = 1, color = "red")
+        })
+    })
+})
+
+shinyApp(ui, server)
+```
+
+### The Code: pay attention to the use of input from ``click``
+Below are the code for the above example. There are detailed comments to explain how to use the input from ``click``.
+
+```{r, eval=FALSE}
+# create the data frame of the map. This data frame contains the longitude and latitude
+# of state borders in the map
+library(ggplot2)
+library(maps)
+usaMap <- map_data("state")
+
+# get the arrest data,which has four columns: number of murder, rate, and assault per 
+# 100,000 population, and percent of population living in urban area, all shown in
+# above plot. The row names are the state names.
+library(MASS)
+data("USArrests")
+
+# define a function which finds which state a point is in. This is the function 
+# that takes input from click and give the name of the state being clicked
+which_state <- function(mapData, long, lat) {
+    # This function decide the state being clicked. 
+    #
+    # Args:
+    #   mapData: The map data has a column "long" and a column "lat" to determine
+    #       state borders. 
+    #   long, lat: longitude and latitude of the clicked point. They are actually
+    #       input$clickMap$x and input$clickMap$y assuming click = "clickMap".
+    #
+    # Returns: 
+    #   The name of the state containing the point (long, lat).
+    
+    # calculate the difference in long and lat of the border with respect to this point
+    mapData$long_diff <- mapData$long - long
+    mapData$lat_diff <- mapData$lat - lat
+    
+    # only compare borders near the clicked point to save computing time
+    mapData <- mapData[abs(mapData$long_diff) < 20 & abs(mapData$lat_diff) < 15, ]
+    
+    # calculate the angle between the vector from this clicked point to border and c(1, 0)
+    vLong <- mapData$long_diff
+    vLat <- mapData$lat_diff
+    mapData$angle <- acos(vLong / sqrt(vLong^2 + vLat^2))
+    
+    # calculate range of the angle and select the state with largest range
+    rangeAngle <- tapply(mapData$angle, mapData$region, function(x) max(x) - min(x))
+    return(names(sort(rangeAngle, decreasing = TRUE))[1])
+}
+
+
+# build the app
+library(shiny)
+plotMap <- ggplot(usaMap, aes(x = long, y = lat, group = group)) + 
+    geom_polygon(fill = "white", color = "black")
+plotArrest <- ggplot(USArrests, aes(x = Murder, y = Rape)) + 
+    geom_point(aes(size = Assault, color = UrbanPop)) + 
+    scale_size(limits = c(1, 350))
+
+ui <- shinyUI(fluidPage(
+    column(
+        width = 6,
+        plotOutput("map", click = "clickMap", width = 430, height = 275)
+    ),
+    column(
+        width = 6,
+        plotOutput("arrest", width = 430, height = 275)
+    )
+))
+
+server <- shinyServer(function(input, output) {
+    # intital plots
+    output$map <- renderPlot({
+        plotMap
+            # coord_map(), do not use it. More discussion next section.
+    })
+    output$arrest <- renderPlot({
+        plotArrest
+    })
+    
+    # plot after click
+    observeEvent(input$clickMap, {
+        xClick <- input$clickMap$x
+        yClick <- input$clickMap$y
+        state <- which_state(usaMap, xClick, yClick)
+        output$map <- renderPlot(
+            plotMap + 
+                geom_polygon(data = usaMap[usaMap$region == state,], fill = "yellow") +
+                annotate("text", x = xClick, y = yClick, label = state, color = "red")
+        )
+        output$arrest <- renderPlot({
+            plotArrest +
+                geom_point(data = USArrests[tolower(rownames(USArrests)) == state,],
+                           size = 6, shape = 1, color = "red")
+        })
+    })
+})
+
+shinyApp(ui, server)
+```
+
+### ``click`` not working well if the maps is plotted with projection {#twoMap}
+It is a common practice to plot a map with projection. In ``ggplot2``, ``coord_map()`` uses mercator projection, which makes a map into a standard one we typically see in a world map. This projection, however, distorted x and y axis, which changes the input of clicks in Shiny. We can see this changes in the maps below. Click on the map without projection, the input from the click, as shown as a dot, is exactly at the clicked point. Click on the map with projection, the yielded point from click shifted from the clicked position. The extent of shift varies from point to point. The simplest solution to this problem is not to use map projection. Actually, the map without projection can be very close to the one with projection by specifying the width and height of the ouput plot, which should satisfy many applications. 
+```{r, echo=FALSE}
+# see code next section for comments
+ui <- shinyUI(fluidPage(
+    column(
+        width = 6,
+        plotOutput("map", click = "clickMap", width = 430, height = 275)
+    ),
+    column(
+        width = 6,
+        plotOutput("mapProj", click = "clickMapProj", width = 430, height = 275)
+    )
+))
+
+server <- shinyServer(function(input, output) {
+    output$map <- renderPlot({
+        ggplot(usaMap, aes(x = long, y = lat, group = group)) + 
+            geom_polygon(fill = "white", color = "black") +
+            ggtitle("without map projection")
+    })
+    output$mapProj <- renderPlot({
+        ggplot(usaMap, aes(x = long, y = lat, group = group)) + 
+            geom_polygon(fill = "white", color = "black") +
+            coord_map() +
+            ggtitle("with map projection")
+    })
+
+    observeEvent(input$clickMap, {
+        xClick <- input$clickMap$x
+        yClick <- input$clickMap$y
+        dfClick <- data.frame(long = xClick, lat = yClick)
+        output$map <- renderPlot({
+            ggplot(usaMap, aes(x = long, y = lat)) + 
+                geom_polygon(aes(group = group), fill = "white", color = "black") + 
+                annotate("text", x = xClick, y = yClick - 1.5, 
+                         label = paste0(round(xClick, 1), ", ", round(yClick,1)), 
+                         color = "red") +
+                geom_point(data = dfClick, aes(long, lat), color = "blue", size = 5) +
+                ggtitle("without map projection")
+        })
+    })
+    
+    observeEvent(input$clickMapProj, {
+        xClickProj <- input$clickMapProj$x
+        yClickProj <- input$clickMapProj$y
+        dfClick <- data.frame(long = xClickProj, lat = yClickProj)
+        output$mapProj <- renderPlot({
+            ggplot(usaMap, aes(x = long, y = lat)) + 
+                geom_polygon(aes(group = group), fill = "white", color = "black") + 
+                annotate("text", x = xClickProj, y = yClickProj - 1.5, 
+                         label = paste0(round(xClickProj, 1), ", ", round(yClickProj,1)), 
+                         color = "red") +
+                coord_map() +
+                geom_point(data = dfClick, aes(long, lat), color = "blue", size = 5) +
+                ggtitle("with map projection")
+        })
+    })
+})
+
+shinyApp(ui, server)
+```
+
+Here is the code.
+```{r, eval = FALSE}
+# shinyUI() and shinyServer() are no longer required as of Shiny 0.10
+ui <- fluidPage(
+    column(
+        width = 6,
+        plotOutput("map", click = "clickMap", width = 430, height = 275)
+    ),
+    column(
+        width = 6,
+        plotOutput("mapProj", click = "clickMapProj", width = 430, height = 275),
+    )
+)
+
+server <- function(input, output) {
+    # these ggplot can be reused
+    plotMap <- ggplot(usaMap, aes(x = long, y = lat)) + 
+        geom_polygon(aes(group = group), fill = "white", color = "black") +
+        ggtitle("without map projection")
+    plotMapProj <- ggplot(usaMap, aes(x = long, y = lat)) + 
+        geom_polygon(aes(group = group), fill = "white", color = "black") +
+        coord_map() +
+        ggtitle("with map projection")
+    
+    # intital plots with and without map projection
+    output$map <- renderPlot({
+        plotMap
+    })
+    output$mapProj <- renderPlot({
+        plotMapProj
+    })
+
+    # plot after click the map without projection
+    observeEvent(input$clickMap, {
+        xClick <- input$clickMap$x
+        yClick <- input$clickMap$y
+        dfClick <- data.frame(long = xClick, lat = yClick)
+        output$map <- renderPlot({
+            plotMap +
+                geom_point(data = dfClick, aes(long, lat), color = "blue", size = 5) +
+                annotate("text", x = xClick, y = yClick - 1.5, 
+                         label = paste0(round(xClick, 1), ", ", round(yClick,1)), 
+                         color = "red")
+        })
+    })
+    
+    # plot after click the map with projection
+    observeEvent(input$clickMapProj, {
+        xClick <- input$clickMapProj$x
+        yClick <- input$clickMapProj$y
+        dfClick <- data.frame(long = xClick, lat = yClick)
+        output$mapProj <- renderPlot({
+            plotMapProj +
+                geom_point(data = dfClick, aes(long, lat), color = "blue", size = 5) +
+                annotate("text", x = xClick, y = yClick - 1.5, 
+                         label = paste0(round(xClick, 1), ", ", round(yClick,1)), 
+                         color = "red")
+        })
+    })
+}
+
+shinyApp(ui, server)
+```
+
+### click on a map created with ``ggmap()``
+Package ``ggmap`` extracts maps from online maps such as Google Maps and Open Street Map and replot maps with function ``ggmap()``, which is based on ``ggplot2``. By default ``ggmap()`` uses the ``coord_map()`` projection, which distorts the coordinate. To get the correct clicked coordinate in Shiny, the map needs to be converted back to Cartesian coordinate. This can be done simply by adding ``coord_cartesian()``. As ``coord_map()`` has been stripped, aspect ratio of the output map can be any. So you need to specify its width and height so that the map still looks lik a nice map.
+
+```{r, echo = FALSE}
+library(ggmap)
+register_google(Sys.getenv("GOOGLE_API"))
+map <- get_map(location = "san diego", maptype="roadmap",scale=2, zoom =4)
+
+ui <- fluidPage(
+    column(
+        width = 6,
+        plotOutput("mapProj", click = "clickMapProj")
+    ),
+    column(
+        width = 6,
+        plotOutput("map", click = "clickMap", width = 385, height = 400)
+    )
+)
+
+server <- function(input, output) {
+    # initial plot with and without projection
+    output$mapProj <- renderPlot({
+        ggmap(map) + ggtitle("with map projection")
+    })
+    output$map <- renderPlot({
+        ggmap(map) + coord_cartesian() + ggtitle("without map projection")
+    })
+    
+    # plot after clicking on map with projection
+    observeEvent(input$clickMapProj, {
+        x <- input$clickMapProj$x
+        y <- input$clickMapProj$y
+        df <- data.frame(long = x, lat = y)
+        output$mapProj <- renderPlot({
+            ggmap(map) + ggtitle("with map projection") +
+                geom_point(data = df, aes(long, lat), size = 5)
+        })
+    })
+    
+    # plot after cliking on map without projection
+    observeEvent(input$clickMap, {
+        x <- input$clickMap$x
+        y <- input$clickMap$y
+        df <- data.frame(long = x, lat = y)
+        output$map <- renderPlot({
+            ggmap(map) + coord_cartesian() + ggtitle("without map projection") +
+                geom_point(data = df, aes(long, lat), size = 5)
+        })
+    })
+}
+
+shinyApp(ui, server)
+```
+
+Again, here is the code.
+```{r, eval = FALSE}
+library(ggmap)
+map <- get_map(location = "san diego", maptype="roadmap",scale=2, zoom =4)
+
+ui <- fluidPage(
+    column(
+        width = 6,
+        plotOutput("mapProj", click = "clickMapProj")
+    ),
+    column(
+        width = 6,
+        plotOutput("map", click = "clickMap", width = 385, height = 400)
+    )
+)
+
+server <- function(input, output) {
+    # initial plot with and without projection
+    output$mapProj <- renderPlot({
+        ggmap(map) + ggtitle("with map projection")
+    })
+    output$map <- renderPlot({
+        ggmap(map) + coord_cartesian() + ggtitle("without map projection")
+    })
+    
+    # plot after clicking on map with projection
+    observeEvent(input$clickMapProj, {
+        x <- input$clickMapProj$x
+        y <- input$clickMapProj$y
+        df <- data.frame(long = x, lat = y)
+        output$mapProj <- renderPlot({
+            ggmap(map) + ggtitle("with map projection") +
+                geom_point(data = df, aes(long, lat), size = 5)
+        })
+    })
+    
+    # plot after cliking on map without projection
+    observeEvent(input$clickMap, {
+        x <- input$clickMap$x
+        y <- input$clickMap$y
+        df <- data.frame(long = x, lat = y)
+        output$map <- renderPlot({
+            ggmap(map) + coord_cartesian() + ggtitle("without map projection") +
+                geom_point(data = df, aes(long, lat), size = 5)
+        })
+    })
+}
+
+shinyApp(ui, server)
+```
+

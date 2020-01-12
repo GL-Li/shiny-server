@@ -1,0 +1,171 @@
+---
+title: 'Shiny: click on a figure to get another'
+runtime: shiny
+output: html_document
+---
+A common task in interactive plotting is to click on figure to extract more information. Shiny is a handy tool for this kind of work. This post demonstrates and explains how to click on a figure to get another using the data from the clicked location. 
+
+### Start with an simple example
+Assume we have 10 groups of data. Each group has one thousand data points. A common way to compare these groups visually is to make a bar plot of means with errors. What if we want to see more details beyond this bar plot, for example, the density distribution of each group? The dull way, of course, is to plot the histograms of all groups. However, with Shiny, we can make interactive plots that is more compact and more informative. What we want to achieve is to click the bar of one group on the bar plot and get the density plot of that group, as shown in the plot below.
+
+```{r, echo=FALSE}
+# make up 9 groups
+set.seed(1234)
+for (i in 1:9) {
+    assign(paste0("group", i), (10 + rnorm(1000)) / i)
+}
+
+# make up a data frame with the 10 groups for easy plotting
+df <- data.frame(temp = 1:1000)
+for (i in 1:9) {
+    df[paste0("group", i)] <- get(paste0("group", i))
+}
+df$temp <- NULL
+
+# extract mean and standard error for bar plot
+avg <- apply(df, 2, mean)
+std <- apply(df, 2, sd)
+errBar <- data.frame(group = colnames(df), avg = avg, std = std)
+```
+
+
+```{r, echo=FALSE}
+library(ggplot2)
+ui <- shinyUI(fluidPage(
+    fluidRow(
+        column(
+            width = 6,
+            h4("bar plot"),
+            plotOutput("bar", click = "clickBar", height = 350)
+        ),
+        column(
+            width = 6,
+            h4("density plot"),
+            plotOutput("hist", height = 350)
+        )
+    )
+))
+
+server <- shinyServer(function(input, output) {
+    output$bar <- renderPlot({
+        ggplot(errBar, aes(x = group, y = avg)) + 
+            geom_bar(stat = "identity", fill = "blue") + 
+            geom_errorbar(aes(ymax = avg + std, ymin = avg - std), width = 0.25)
+    })
+    
+    # click to generate histogram
+    observeEvent(input$clickBar, {
+        groupId <- round(input$clickBar$x)
+        output$hist <- renderPlot({
+            ggplot(df, aes_string(paste0("group", groupId))) +
+                geom_density() +
+                xlim(c(0, 14)) +
+                ylim(c(0, 4)) +
+                xlab(paste0("data in group ", groupId) )
+        })
+    })
+})
+
+shinyApp(ui, server)
+```
+
+Let's look at the code. First we need make up some data for the plot. They are just a bunch of dummy data produced for demonstration of the interactive plotting, so you won't get distracted.
+
+```{r, eval=FALSE}
+# make up 9 groups of random data
+set.seed(1234)
+for (i in 1:9) {
+    assign(paste0("group", i), (10 + rnorm(1000)) / i)
+}
+
+# make a data frame with the 9 groups for easy plotting
+df <- data.frame(temp = 1:1000)
+for (i in 1:9) {
+    df[paste0("group", i)] <- get(paste0("group", i))
+}
+df$temp <- NULL
+
+# extract mean and standard error for bar plot
+avg <- apply(df, 2, mean)
+std <- apply(df, 2, sd)
+errBar <- data.frame(group = colnames(df), avg = avg, std = std)
+```
+
+We now build the shiny app with the data. This app produces the interactive plot above.
+```{r, eval=FALSE}
+library(ggplot2)
+ui <- shinyUI(fluidPage(
+    fluidRow(
+        column(
+            width = 6,
+            h4("bar plot"),
+            plotOutput("bar", click = "clickBar", height = 350)
+        ),
+        column(
+            width = 6,
+            h4("density plot"),
+            plotOutput("hist", height = 350)
+        )
+    )
+))
+
+server <- shinyServer(function(input, output) {
+    # bar plot with error bar
+    output$bar <- renderPlot({
+        ggplot(errBar, aes(x = group, y = avg)) + 
+            geom_bar(stat = "identity", fill = "blue") + 
+            geom_errorbar(aes(ymax = avg + std, ymin = avg - std), width = 0.25)
+    })
+    
+    # click to generate density plot
+    observeEvent(input$clickBar, {
+        groupId <- round(input$clickBar$x)
+        output$hist <- renderPlot({
+            ggplot(df, aes_string(paste0("group", groupId))) +
+                geom_density() +
+                xlim(c(0, 14)) +
+                ylim(c(0, 4)) +
+                xlab(paste0("data in group ", groupId) )
+        })
+    })
+})
+
+shinyApp(ui, server)
+```
+
+
+### Understand the parameter ``click``
+What does the trick is a parameter called ``click`` of function ``plotOutput`` in ``ui`` part of the application. In above example, we name click as ``click = "clickBar"``. When you click the figure the ``plotOutput`` function generates, a sginal is sent to the server side of the app, where the signal can be retrieved as ``input$clickBar``. Be more specific, ``input$clickBar$x`` and ``input$clickBar$y`` are the $(x, y)$ coordinates of the clicked point. 
+
+Let's make a quick example app to show that it is true.
+```{r}
+ui <- shinyUI(fluidPage(
+    plotOutput("random", click = "clickPoint", width = 300, height = 300),
+    p("Just click on any point in the figure and check x and y below:"),
+    verbatimTextOutput("clicked")
+))
+
+server <- shinyServer(function(input, output) {
+    # make up a random plot
+    output$random <- renderPlot({
+        plot(rnorm(50), rnorm(50))
+    })
+    
+    # output (x, y) of the clicked point
+    output$clicked <- renderPrint({
+        c("inupt$clickPoint$x" = input$clickPoint$x, "inupt$clickPoint$y" = input$clickPoint$y)
+    })
+})
+
+shinyApp(ui,server)
+```
+
+Click on the figure and check the output $(x, y)$. Did you see that the $(x, y)$ of clicked point are indeed sent to server side through ``inupt$clickPoint$x`` and ``inupt$clickPoint$y``? Of course, it is true. 
+
+We can use the $(x, y)$ of the clicked point to select data. In the bar plot example, we only use the $x$ value to get the groupID. Note that for a categorical variable, the $x$ value is 1 for the first level, 2 for the second, and so on. 
+```{r, eval=FALSE}
+groupId <- round(input$clickBar$x)
+```
+
+In priciple, we can use $(x, y)$ of clicked point as indices to select any possible data at the server side, make whatever you want, and send it back to ui side.
+
