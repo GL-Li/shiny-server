@@ -4,7 +4,7 @@ author: "GL Li"
 date: "December 7, 2015"
 output: html_document
 ---
-<a href="http://useshiny.com/apps/China_census" target="_blank"><h4>China census 2010</h4></a> 
+<a href="http://gl-li.be/apps/China_census" target="_blank"><h4>China census 2010</h4></a> 
 
 This application visualizes the China 2010 census. China has conducted a national census covering all population every ten years since 1990, collecting data such as age, gender, education and housing. The most recent one was carried out in November 01, 2010. The official summary of the census is published on the webpage of [National Bureau of Statistics of China](http://www.stats.gov.cn/tjsj/pcsj/rkpc/6rp/indexch.htm) as Excel sheets. This app conveys the information essential to understanding China through interactive visualization. 
 
