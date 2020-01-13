@@ -322,7 +322,7 @@ Package ``ggmap`` extracts maps from online maps such as Google Maps and Open St
 
 ```{r, echo = FALSE}
 library(ggmap)
-register_google(Sys.getenv("GOOGLE_API"))
+Sys.getenv("GGMAP_GOOGLE_API_KEY")
 map <- get_map(location = "san diego", maptype="roadmap",scale=2, zoom =4)
 
 ui <- fluidPage(
